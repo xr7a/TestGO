@@ -17,9 +17,7 @@ func NewConfig() (Config, error) {
 	env := GetEnv()
 
 	var result Config
-	currentDir, err := os.Getwd()
 
-	fmt.Printf("Текущая рабочая директория: %s\n", currentDir)
 	filePath := fmt.Sprintf(".config/appsettings.%s.json", env)
 	fileBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {

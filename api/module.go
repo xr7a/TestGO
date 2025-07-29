@@ -2,6 +2,7 @@ package api
 
 import (
 	"awesomeProject/api/handlers"
+	"awesomeProject/services"
 	"context"
 	"errors"
 	"github.com/gorilla/mux"
@@ -11,12 +12,21 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(PingRouter),
+	fx.Provide(MainRouter),
 	fx.Invoke(StartServer))
 
-func PingRouter() *mux.Router {
+func MainRouter(userService services.UserService, departmentService services.DepartmentService) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/ping", handlers.Ping).Methods(http.MethodGet)
+
+	departmentRouter := router.PathPrefix("/department").Subrouter()
+	handlers.HandleDepartmentRoutes(departmentRouter, departmentService)
+
+	usersRouter := router.PathPrefix("/users").Subrouter()
+	handlers.HandleUserRoutes(usersRouter, userService)
+
+	pingRouter := router.PathPrefix("/ping").Subrouter()
+	handlers.HandlePingRoutes(pingRouter)
+
 	return router
 }
 

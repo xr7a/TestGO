@@ -1,16 +1,14 @@
 package handlers
 
 import (
-	"awesomeProject/services"
+	"github.com/gorilla/mux"
 	"net/http"
 )
 
-func Ping(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("pong"))
+func HandlePingRoutes(router *mux.Router) {
+	router.HandleFunc("", Ping).Methods(http.MethodGet)
 }
 
-func PingConfig(service services.UserService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		service.GetConfig()
-	}
+func Ping(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("pong"))
 }

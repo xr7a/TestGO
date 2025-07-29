@@ -16,11 +16,10 @@ create table if not exists users(
 
 create table if not exists passports(
     id serial primary key,
-    user_id int references users(id),
+    user_id int references users(id) on delete cascade,
     type varchar not null,
     number varchar not null
 );
-
 
 -- +goose Down
 drop table if exists users;
