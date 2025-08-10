@@ -82,7 +82,7 @@ func RunQueryOperation[T any](ctx context.Context, dbManager DatabaseManager, fn
 
 	typedResult, ok := result.(T)
 	if !ok {
-		return zero, fmt.Errorf("cannot cast result to %T", result, zero)
+		return zero, fmt.Errorf("cannot cast result to %T", zero)
 	}
 	return typedResult, nil
 }
