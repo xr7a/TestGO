@@ -7,11 +7,9 @@ import (
 	"go.uber.org/zap"
 )
 
-type TxFunc func(ctx context.Context, tx sqlx.ExtContext) (interface{}, error)
-
 type DatabaseManager interface {
-	RunWithTransaction(context.Context, TxFunc) (interface{}, error)
-	RunWithoutTransaction(context.Context, TxFunc) (interface{}, error)
+	RunWithTransaction(context.Context, func(context.Context, sqlx.ExtContext) error) error
+	RunWithoutTransaction(context.Context, func(context.Context, sqlx.ExtContext) error) error
 }
 
 type DatabaseManagerImpl struct {
@@ -26,22 +24,26 @@ func NewTransactionManager(db *sqlx.DB, logger *zap.Logger) DatabaseManager {
 	}
 }
 
-func (m *DatabaseManagerImpl) RunWithTransaction(ctx context.Context, txFunc TxFunc) (interface{}, error) {
+func (m *DatabaseManagerImpl) RunWithTransaction(ctx context.Context, txFunc func(ctx context.Context, tx sqlx.ExtContext) error) error {
 	tx, err := m.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("cannot start transaction: %w", err)
+		return fmt.Errorf("cannot start transaction: %w", err)
 	}
 
 	defer func() {
 		if p := recover(); p != nil {
 			m.logger.Panic("recovered from panic", zap.Any("panic", p))
-			err := tx.Rollback()
-			if err != nil {
-				m.logger.Error("cannot rollback transaction after panic", zap.Error(err))
+			rerr := tx.Rollback()
+			if rerr != nil {
+				m.logger.Error("cannot rollback transaction after panic", zap.Error(rerr))
 			}
 			panic(p)
 		} else if err != nil {
 			m.logger.Error("error inside transaction operation", zap.Error(err))
+			rerr := tx.Rollback()
+			if rerr != nil {
+				m.logger.Error("cannot rollback transaction", zap.Error(rerr))
+			}
 		} else {
 			commitErr := tx.Commit()
 			if commitErr != nil {
@@ -51,60 +53,41 @@ func (m *DatabaseManagerImpl) RunWithTransaction(ctx context.Context, txFunc TxF
 		}
 	}()
 
-	return txFunc(ctx, tx)
+	err = txFunc(ctx, tx)
+	return err
 }
 
-func (m *DatabaseManagerImpl) RunWithoutTransaction(ctx context.Context, fn TxFunc) (interface{}, error) {
+func (m *DatabaseManagerImpl) RunWithoutTransaction(ctx context.Context, fn func(ctx context.Context, exec sqlx.ExtContext) error) error {
 	return fn(ctx, m.db)
 }
 
-func RunQueryOperation[T any](ctx context.Context, dbManager DatabaseManager, fn TxFunc, withTransaction bool) (T, error) {
-	uniFunc := func(ctx context.Context, exec sqlx.ExtContext) (interface{}, error) {
-		result, err := fn(ctx, exec)
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
+func RunQueryOperation[T any](ctx context.Context, dbManager DatabaseManager, fn func(ctx context.Context, exec sqlx.ExtContext) (T, error), withTransaction bool) (T, error) {
+	var (
+		result T
+		err    error
+	)
 
-	var zero T
-	var result interface{}
-	var err error
-
-	if withTransaction {
-		result, err = dbManager.RunWithTransaction(ctx, uniFunc)
-	} else {
-		result, err = dbManager.RunWithoutTransaction(ctx, uniFunc)
-	}
-	if err != nil {
-		return zero, err
-	}
-
-	typedResult, ok := result.(T)
-	if !ok {
-		return zero, fmt.Errorf("cannot cast result to %T", result, zero)
-	}
-	return typedResult, nil
-}
-
-func RunExecOperation(ctx context.Context, dbManager DatabaseManager, fn TxFunc, withTransaction bool) error {
-	uniFunc := func(ctx context.Context, exec sqlx.ExtContext) (interface{}, error) {
-		result, err := fn(ctx, exec)
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-
-	var err error
-	if withTransaction {
-		_, err = dbManager.RunWithTransaction(ctx, uniFunc)
-	} else {
-		_, err = dbManager.RunWithoutTransaction(ctx, uniFunc)
-	}
-
-	if err != nil {
+	callback := func(ctx context.Context, exec sqlx.ExtContext) error {
+		result, err = fn(ctx, exec)
 		return err
 	}
-	return nil
+
+	if withTransaction {
+		err = dbManager.RunWithTransaction(ctx, callback)
+	} else {
+		err = dbManager.RunWithoutTransaction(ctx, callback)
+	}
+
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return result, nil
+}
+
+func RunExecOperation(ctx context.Context, dbManager DatabaseManager, fn func(ctx context.Context, exec sqlx.ExtContext) error, withTransaction bool) error {
+	if withTransaction {
+		return dbManager.RunWithTransaction(ctx, fn)
+	}
+	return dbManager.RunWithoutTransaction(ctx, fn)
 }

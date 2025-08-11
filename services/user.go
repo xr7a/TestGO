@@ -33,12 +33,12 @@ func NewUserServiceImpl(dbManager dal.DatabaseManager, userWriteRepository users
 }
 
 func (u *UserServiceImpl) CreateUser(ctx context.Context, userPassport models.UserPassport) (models.SuccessCreateUser, error) {
-	return dal.RunQueryOperation[models.SuccessCreateUser](ctx, u.dbManager, func(ctx context.Context, tx sqlx.ExtContext) (interface{}, error) {
+	return dal.RunQueryOperation[models.SuccessCreateUser](ctx, u.dbManager, func(ctx context.Context, tx sqlx.ExtContext) (models.SuccessCreateUser, error) {
 		dbUser := mappers.MapToDbUser(userPassport)
 		createdUser, err := u.userWriteRepository.CreateUser(ctx, tx, dbUser)
 		if err != nil {
 			u.logger.Error("Failed to create user", zap.Error(err))
-			return nil, err
+			return models.SuccessCreateUser{}, err
 		}
 
 		user := mappers.MapToDomainSuccessCreateUser(createdUser)
@@ -46,7 +46,7 @@ func (u *UserServiceImpl) CreateUser(ctx context.Context, userPassport models.Us
 		passport, err := u.passportWriteRepository.CreatePassport(ctx, tx, mappers.MapToDbPassport(userPassport, user.Id))
 		if err != nil {
 			u.logger.Error("Failed to create passport", zap.Error(err))
-			return nil, err
+			return models.SuccessCreateUser{}, err
 		}
 
 		user.Passport = mappers.MapToDomainPassport(passport)

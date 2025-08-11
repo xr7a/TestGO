@@ -29,11 +29,7 @@ func NewDepartmentServiceImpl(dbManager dal.DatabaseManager, departmentWriteRepo
 }
 
 func (s *DepartmentServiceImpl) CreateDepartment(ctx context.Context, department models.Department) error {
-	return dal.RunExecOperation(ctx, s.dbManager, func(ctx context.Context, tx sqlx.ExtContext) (interface{}, error) {
-		err := s.departmentWriteRepository.CreateDepartment(ctx, tx, mappers.MapToDbDepartment(department))
-		if err != nil {
-			return nil, err
-		}
-		return nil, nil
+	return dal.RunExecOperation(ctx, s.dbManager, func(ctx context.Context, tx sqlx.ExtContext) error {
+		return s.departmentWriteRepository.CreateDepartment(ctx, tx, mappers.MapToDbDepartment(department))
 	}, false)
 }
